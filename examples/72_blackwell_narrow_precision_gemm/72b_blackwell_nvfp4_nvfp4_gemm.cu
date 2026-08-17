@@ -26,8 +26,6 @@
 #include "cutlass/util/reference/host/tensor_compare.h"
 
 
-#include <iostream>
-
 #include "helper.h"
 
 using namespace cute;
@@ -149,19 +147,19 @@ uint64_t seed;
 
 // The HostTensors are only used for allocating memory on host and device, and transferring data between host and device
 // Use cute::Tensor and cute::Layout for iterating thru the matrix elements
-cutlass::HostTensor<ElementA::DataType, cutlass::layout::PackedVectorLayout> block_A;
+cutlass::HostTensor<ElementA::DataType, cutlass::layout::PackedVectorLayout> block_A;    //nvfp4
 cutlass::HostTensor<ElementA::ScaleFactorType, cutlass::layout::PackedVectorLayout> block_SFA;
-cutlass::HostTensor<ElementB::DataType, cutlass::layout::PackedVectorLayout> block_B;
+cutlass::HostTensor<ElementB::DataType, cutlass::layout::PackedVectorLayout> block_B;    //nvfp4
 cutlass::HostTensor<ElementB::ScaleFactorType, cutlass::layout::PackedVectorLayout> block_SFB;
-cutlass::HostTensor<ElementC, cutlass::layout::PackedVectorLayout> block_C;
+cutlass::HostTensor<ElementC, cutlass::layout::PackedVectorLayout> block_C;              //fp32
 // Output Tensors
-cutlass::HostTensor<ElementD, cutlass::layout::PackedVectorLayout> block_D;
-cutlass::HostTensor<ElementSFD, cutlass::layout::PackedVectorLayout> block_SFD;
+cutlass::HostTensor<ElementD, cutlass::layout::PackedVectorLayout> block_D;              //nvfp4
+cutlass::HostTensor<ElementSFD, cutlass::layout::PackedVectorLayout> block_SFD;          //fp8
 // Reference Output Tensors
 cutlass::HostTensor<ElementD, cutlass::layout::PackedVectorLayout> block_reference_D;
 cutlass::HostTensor<ElementSFD, cutlass::layout::PackedVectorLayout> block_reference_SFD;
 // Matrix-wide normalization constant
-cutlass::HostTensor<ElementCompute, cutlass::layout::PackedVectorLayout> block_Normconst;
+cutlass::HostTensor<ElementCompute, cutlass::layout::PackedVectorLayout> block_Normconst; //fp32
 
 #endif // defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
 
@@ -174,7 +172,7 @@ auto make_iterator(T* ptr) {
 /// Testbed utility types
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Command line options parsing
+
 struct Options {
 
   bool help;
@@ -186,7 +184,7 @@ struct Options {
 
   Options():
     help(false),
-    m(1024), n(1024), k(1024),
+    m(128), n(7168), k(16384),
     alpha(1.f), beta(0.f),
     iterations(10),
     swizzle(0)
@@ -231,7 +229,6 @@ struct Options {
     return out;
   }
 
-  /// Compute performance in GFLOP/s
   double gflops(double runtime_s) const
   {
     // Two flops per multiply-add
@@ -262,10 +259,6 @@ struct Result
 };
 
 #if defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
-/// GEMM setup and evaluation
-/////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Helper to initialize a block of device data
 template <typename Element, typename Layout>
@@ -469,77 +462,39 @@ int run(Options &options)
     exit(-1);
   }
 
-  // Run profiling loop
-  if (options.iterations > 0)
-  {
-    GpuTimer timer;
-    timer.start();
-    for (int iter = 0; iter < options.iterations; ++iter) {
-      CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
-      CUTLASS_CHECK(gemm.run());
-    }
-    timer.stop();
-
-    // Compute average runtime and GFLOPs.
-    float elapsed_ms = timer.elapsed_millis();
-    result.avg_runtime_ms = double(elapsed_ms) / double(options.iterations);
-    result.gflops = options.gflops(result.avg_runtime_ms / 1000.0);
-
-
-    std::cout << "  Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << std::endl;
-    std::cout << "  Avg runtime: " << result.avg_runtime_ms << " ms" << std::endl;
-    std::cout << "  GFLOPS: " << result.gflops << std::endl;
+  GpuTimer timer;
+  timer.start();
+  for (int iter = 0; iter < options.iterations; ++iter) {
+    CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
+    CUTLASS_CHECK(gemm.run());
   }
+  timer.stop();
+
+  // Compute average runtime and GFLOPs.
+  float elapsed_ms = timer.elapsed_millis();
+  result.avg_runtime_ms = double(elapsed_ms) / double(options.iterations);
+  result.gflops = options.gflops(result.avg_runtime_ms / 1000.0);
+
+
+  std::cout << "  Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << std::endl;
+  std::cout << "  Avg runtime: " << result.avg_runtime_ms << " ms" << std::endl;
+  std::cout << "  GFLOPS: " << result.gflops << std::endl;
+
 
   return 0;
 }
 
 #endif // defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char const **args) {
 
-  // CUTLASS must be compiled with CUDA 12.8 or higher Toolkit to run this example
-  // and must have compute capability at least 100.
-  if (__CUDACC_VER_MAJOR__ < 12 || (__CUDACC_VER_MAJOR__ == 12 && __CUDACC_VER_MINOR__ < 8)) {
-    std::cerr << "This example requires CUDA 12.8 or newer." << std::endl;
-    // Returning zero so this test passes on older Toolkits. Its actions are no-op.
-    return 0;
-  }
-
-  cudaDeviceProp props;
-  int current_device_id;
-  CUDA_CHECK(cudaGetDevice(&current_device_id));
-
-  CUDA_CHECK(cudaGetDeviceProperties(&props, current_device_id));
-
-  if (props.major != 10 || (props.minor != 0 && props.minor != 1 && props.minor != 3)) {
-    std::cerr << "This example requires a GPU with compute capability 100a|f, 101a|f, or 103a|f)." << std::endl;
-    return 0;
-  }
-
-  //
-  // Parse options
-  //
-
   Options options;
-
   options.parse(argc, args);
 
-  if (options.help) {
-    options.print_usage(std::cout) << std::endl;
-    return 0;
-  }
-
-  //
-  // Evaluate CUTLASS kernels
-  //
-#if defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
   run<Gemm>(options);
-#endif // defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
+
 
   return 0;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
