@@ -1,38 +1,3 @@
-/***************************************************************************************************
- * Copyright (c) 2024 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- **************************************************************************************************/
-
-/*! \file
-    \brief 
-*/
-
 #pragma once
 
 #include "cutlass/arch/cache_operation.h"  /// cutlass::arch::CacheOperation
@@ -101,18 +66,18 @@ template <typename ElementA_,
           typename ElementSFA_,
           typename ElementSFB_,
           int kSFVecSize_>
-struct GemvBlockScaled<ElementA_,
+struct GemvBlockScaled<ElementA_,        //nvfp4
             cutlass::layout::RowMajor,
-            ElementB_,
-            ElementC_,
-            ElementAccumulator_,
+            ElementB_,                   //nvfp4
+            ElementC_,                   //nvfp4
+            ElementAccumulator_,         //half
             EpilogueOutputOp_,
-            kElementsPerAccess_,
-            kThreadCount_,
-            kThreadsPerRow_,
-            ElementSFA_,
-            ElementSFB_,
-            kSFVecSize_>
+            kElementsPerAccess_,         //1
+            kThreadCount_,               //0
+            kThreadsPerRow_,             //0
+            ElementSFA_,                 //fp8
+            ElementSFB_,                 //fp8
+            kSFVecSize_>                 //16
 {
 public:
   using ElementA = ElementA_;
@@ -496,10 +461,10 @@ public:
 
         CUTLASS_PRAGMA_UNROLL
         for (int mask = (kThreadsPerRow >> 1); mask > 0; mask >>= 1) {
-          accum += ElementAccumulator(__shfl_xor_sync(0xFFFFFFFF, static_cast<float>(accum), mask, 32));
+          accum += ElementAccumulator(__shfl_xor_sync(0xFFFFFFFF, static_cast<float>(accum), mask, 32)); //FP4
         }
 
-        auto frag_acc = static_cast<typename EpilogueOutputOp::ElementAccumulator>(accum);
+        auto frag_acc = static_cast<typename EpilogueOutputOp::ElementAccumulator>(accum); //float
         auto frag_c = static_cast<typename EpilogueOutputOp::ElementC>(*(ptr_C));
         
         // Applying blockscaled epilogue

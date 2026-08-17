@@ -24,19 +24,6 @@ namespace cutlass::gemm::device {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-/*!
-  GemmUniversalAdapter is a stateful, reusable GEMM handle built around a kernel
-  of type cutlass::gemm::kernel::Gemm or cutlass::gemm::kernel::GemmUniversal.
-
-  It manages the lifetime of the underlying `kernel::Params` struct, and exposes APIs
-  to create it from the host facing arguments. For power users, new static methods
-  are exposed in 3.x APIs that bypass the stateful methods or args->params lowering.
-
-  It supports kernel types that implement both the 2.x and 3.0 APIs,
-  however, this is done by specializing the implementation of GemmUniversalAdapter
-  on the two kernel API types, and thus, GemmUniversalAdapter's behaviour might
-  differ between the two specializations.
-*/
 template <class GemmKernel_, class Enable = void>
 class GemmUniversalAdapter;
 

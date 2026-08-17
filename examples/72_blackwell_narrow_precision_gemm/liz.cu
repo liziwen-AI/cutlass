@@ -147,19 +147,19 @@ uint64_t seed;
 
 // The HostTensors are only used for allocating memory on host and device, and transferring data between host and device
 // Use cute::Tensor and cute::Layout for iterating thru the matrix elements
-cutlass::HostTensor<ElementA::DataType, cutlass::layout::PackedVectorLayout> block_A;
+cutlass::HostTensor<ElementA::DataType, cutlass::layout::PackedVectorLayout> block_A;    //nvfp4
 cutlass::HostTensor<ElementA::ScaleFactorType, cutlass::layout::PackedVectorLayout> block_SFA;
-cutlass::HostTensor<ElementB::DataType, cutlass::layout::PackedVectorLayout> block_B;
+cutlass::HostTensor<ElementB::DataType, cutlass::layout::PackedVectorLayout> block_B;    //nvfp4
 cutlass::HostTensor<ElementB::ScaleFactorType, cutlass::layout::PackedVectorLayout> block_SFB;
-cutlass::HostTensor<ElementC, cutlass::layout::PackedVectorLayout> block_C;
+cutlass::HostTensor<ElementC, cutlass::layout::PackedVectorLayout> block_C;              //fp32
 // Output Tensors
-cutlass::HostTensor<ElementD, cutlass::layout::PackedVectorLayout> block_D;
-cutlass::HostTensor<ElementSFD, cutlass::layout::PackedVectorLayout> block_SFD;
+cutlass::HostTensor<ElementD, cutlass::layout::PackedVectorLayout> block_D;              //nvfp4
+cutlass::HostTensor<ElementSFD, cutlass::layout::PackedVectorLayout> block_SFD;          //fp8
 // Reference Output Tensors
 cutlass::HostTensor<ElementD, cutlass::layout::PackedVectorLayout> block_reference_D;
 cutlass::HostTensor<ElementSFD, cutlass::layout::PackedVectorLayout> block_reference_SFD;
 // Matrix-wide normalization constant
-cutlass::HostTensor<ElementCompute, cutlass::layout::PackedVectorLayout> block_Normconst;
+cutlass::HostTensor<ElementCompute, cutlass::layout::PackedVectorLayout> block_Normconst; //fp32
 
 #endif // defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
 
