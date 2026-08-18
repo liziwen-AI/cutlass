@@ -169,6 +169,17 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       return params_;
     }
 
+    /// Determines whether the GEMM can execute the given problem.
+    static Status
+    can_implement(Arguments const& args) {
+      if (GemmKernel::can_implement(args)) {
+        return Status::kSuccess;
+      }
+      else {
+        return Status::kInvalid;
+      }
+    }
+
     /// Gets the workspace size
     static size_t
     get_workspace_size(Arguments const& args) {
@@ -307,7 +318,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
         cudaStream_t stream = nullptr,
         CudaHostAdapter *cuda_adapter = nullptr,
         bool launch_with_pdl = false) {
-
       dim3 const block = GemmKernel::get_block_shape();
       dim3 const grid = get_grid_shape(params);
 
@@ -316,42 +326,96 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
 
       Status launch_result{ Status::kSuccess };
       // Use extended launch API only for mainloops that use it
-      
-
+      if constexpr (GemmKernel::ArchTag::kMinComputeCapability >= 90) {
+        [[maybe_unused]] constexpr bool is_static_1x1x1 =
+          cute::is_static_v<typename GemmKernel::DispatchPolicy::ClusterShape> and
+          cute::size(typename GemmKernel::DispatchPolicy::ClusterShape{}) == 1;
+        [[maybe_unused]] dim3 cluster(cute::size<0>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
+          cute::size<1>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
+          cute::size<2>(typename GemmKernel::DispatchPolicy::ClusterShape{}));
         
-      [[maybe_unused]] dim3 cluster(cute::size<0>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
-        cute::size<1>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
-        cute::size<2>(typename GemmKernel::DispatchPolicy::ClusterShape{}));
-      
-      // Dynamic cluster support
-      [[maybe_unused]] dim3 fallback_cluster = dim3{0,0,0};
-      if constexpr (GemmKernel::ArchTag::kMinComputeCapability == 100 
-                    || GemmKernel::ArchTag::kMinComputeCapability == 101
-                    || GemmKernel::ArchTag::kMinComputeCapability == 103
-                    ) {
-        if constexpr (!cute::is_static_v<typename GemmKernel::DispatchPolicy::ClusterShape>) {
-          fallback_cluster = params.hw_info.cluster_shape_fallback;
-          cluster = params.hw_info.cluster_shape;
+        // Dynamic cluster support
+        [[maybe_unused]] dim3 fallback_cluster = dim3{0,0,0};
+        if constexpr (GemmKernel::ArchTag::kMinComputeCapability == 100 
+                      || GemmKernel::ArchTag::kMinComputeCapability == 101
+                      || GemmKernel::ArchTag::kMinComputeCapability == 103
+                      ) {
+          if constexpr (!cute::is_static_v<typename GemmKernel::DispatchPolicy::ClusterShape>) {
+            fallback_cluster = params.hw_info.cluster_shape_fallback;
+            cluster = params.hw_info.cluster_shape;
+          }
+        }
+        
+        [[maybe_unused]] void* kernel_params[] = {&params};
+
+        if constexpr (kEnableCudaHostAdapter) {}
+        else {
+          CUTLASS_ASSERT(cuda_adapter == nullptr);
+          [[maybe_unused]] void const* kernel = (void const*) device_kernel<GemmKernel>;
+          static constexpr bool kClusterLaunch = GemmKernel::ArchTag::kMinComputeCapability == 90;
+          if constexpr (kClusterLaunch) {
+            if constexpr (is_static_1x1x1) {
+
+              launch_result = cutlass::kernel_launch<GemmKernel>(
+                grid, block, smem_size, stream, params, launch_with_pdl);
+              if (launch_result != Status::kSuccess) {
+                CUTLASS_TRACE_HOST("GemmUniversal::run: cutlass::kernel_launch reports failure");
+              }
+ 
+            }
+            else {
+              launch_result = ClusterLauncher::launch(
+                grid, cluster, block, smem_size, stream, kernel, kernel_params, launch_with_pdl);
+            }
+          }
+          
+          else {
+            if constexpr (GemmKernel::ArchTag::kMinComputeCapability == 100
+                          || GemmKernel::ArchTag::kMinComputeCapability == 101
+                          || GemmKernel::ArchTag::kMinComputeCapability == 120
+                          || GemmKernel::ArchTag::kMinComputeCapability == 103
+                        ) {
+              if constexpr (is_static_1x1x1) {
+                launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);
+                if (launch_result != Status::kSuccess) {
+                  CUTLASS_TRACE_HOST("GemmUniversal::run: cutlass::kernel_launch reports failure");
+                }
+              }
+              else {
+                launch_result = ClusterLauncher::launch_with_fallback_cluster(
+                  grid, 
+                  cluster,
+                  fallback_cluster,
+                  block,
+                  smem_size,
+                  stream,
+                  kernel,
+                  kernel_params,
+                  launch_with_pdl);
+              }
+            }
+          }
+          
         }
       }
       
-      [[maybe_unused]] void* kernel_params[] = {&params};
-      
-      
-      [[maybe_unused]] void const* kernel = (void const*) device_kernel<GemmKernel>;
 
-
-      static constexpr bool kClusterLaunch = GemmKernel::ArchTag::kMinComputeCapability == 90;
-      
-    
-      
-      launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);
-
-    
-         
-
+      cudaError_t result = cudaGetLastError();
+      if (cudaSuccess == result && Status::kSuccess == launch_result) {
+  #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
+        CUTLASS_TRACE_HOST("GemmUniversal::run: cudaGetLastError reports success");
+  #endif
+        return Status::kSuccess;
+      }
+      else {
+        CUTLASS_TRACE_HOST("  Kernel launch failed. Reason: " << result);
+        return Status::kErrorInternal;
+      }
     }
 
+    //
+    // Non-static launch overloads that first create and set the internal params struct of this kernel handle.
+    //
 
     /// Launches the kernel after first constructing Params internal state from supplied arguments.
     Status
