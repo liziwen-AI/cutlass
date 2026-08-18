@@ -169,16 +169,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       return params_;
     }
 
-    /// Determines whether the GEMM can execute the given problem.
-    static Status
-    can_implement(Arguments const& args) {
-      if (GemmKernel::can_implement(args)) {
-        return Status::kSuccess;
-      }
-      else {
-        return Status::kInvalid;
-      }
-    }
 
     /// Gets the workspace size
     static size_t
@@ -195,60 +185,9 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       return workspace_bytes;
     }
 
-    /// Computes the grid shape
-    static dim3
-    get_grid_shape(Arguments const& args, void* workspace = nullptr) {
-      auto tmp_params = GemmKernel::to_underlying_arguments(args, workspace);
-      return GemmKernel::get_grid_shape(tmp_params);
-    }
 
-    /// Computes the grid shape
-    static dim3
-    get_grid_shape(Params const& params) {
-      return GemmKernel::get_grid_shape(params);
-    }
 
-    /// Computes the maximum number of active blocks per multiprocessor
-    static int maximum_active_blocks(int /* smem_capacity */ = -1) {
-      CUTLASS_TRACE_HOST("GemmUniversal::maximum_active_blocks()");
-      int max_active_blocks = -1;
-      int smem_size = GemmKernel::SharedStorageSize;
 
-      // first, account for dynamic smem capacity if needed
-      cudaError_t result;
-      if (smem_size >= (48 << 10)) {
-        CUTLASS_TRACE_HOST("  Setting smem size to " << smem_size);
-        result = cudaFuncSetAttribute(
-            device_kernel<GemmKernel>,
-            cudaFuncAttributeMaxDynamicSharedMemorySize,
-            smem_size);
-        if (cudaSuccess != result) {
-          result = cudaGetLastError(); // to clear the error bit
-          CUTLASS_TRACE_HOST(
-            "  cudaFuncSetAttribute() returned error: "
-            << cudaGetErrorString(result));
-          return -1;
-        }
-      }
-
-      // query occupancy after setting smem size
-      result = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-          &max_active_blocks,
-          device_kernel<GemmKernel>,
-          GemmKernel::MaxThreadsPerBlock,
-          smem_size);
-
-      if (cudaSuccess != result) {
-        result = cudaGetLastError(); // to clear the error bit
-        CUTLASS_TRACE_HOST(
-          "  cudaOccupancyMaxActiveBlocksPerMultiprocessor() returned error: "
-          << cudaGetErrorString(result));
-        return -1;
-      }
-
-      CUTLASS_TRACE_HOST("  max_active_blocks: " << max_active_blocks);
-      return max_active_blocks;
-    }
 
     /// Initializes GEMM state from arguments.
     Status
@@ -297,22 +236,10 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       return Status::kSuccess;
     }
 
-    /// Update API is preserved in 3.0, but does not guarantee a lightweight update of params.
-    Status
-    update(Arguments const& args, void* workspace = nullptr) {
-      CUTLASS_TRACE_HOST("GemmUniversal()::update() - workspace: " << workspace);
 
-      size_t workspace_bytes = get_workspace_size(args);
-      if (workspace_bytes > 0 && nullptr == workspace) {
-        return Status::kErrorWorkspaceNull;
-      }
 
-      params_ = GemmKernel::to_underlying_arguments(args, workspace);
-      return Status::kSuccess;
-    }
 
-    /// Primary run() entry point API that is static allowing users to create and manage their own params.
-    /// Supplied params struct must be construct by calling GemmKernel::to_underlying_arguments()
+
     static Status
     run(Params& params,
         cudaStream_t stream = nullptr,
@@ -335,28 +262,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
 
     }
 
-    //
-    // Non-static launch overloads that first create and set the internal params struct of this kernel handle.
-    //
-
-    /// Launches the kernel after first constructing Params internal state from supplied arguments.
-    Status
-    run(
-      Arguments const& args,
-      void* workspace = nullptr,
-      cudaStream_t stream = nullptr,
-      CudaHostAdapter *cuda_adapter = nullptr,
-      bool launch_with_pdl = false
-    ) {
-      Status status = initialize(args, workspace, stream, cuda_adapter);
-
-      if (Status::kSuccess == status) {
-        status = run(params_, stream, cuda_adapter, launch_with_pdl);
-      }
-      return status;
-    }
-
-    /// Overload that allows a user to re-launch the same kernel without updating internal params struct.
     Status
     run(
       cudaStream_t stream = nullptr,
@@ -365,11 +270,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       return run(params_, stream, cuda_adapter, launch_with_pdl);
     }
 
-    /// Overload that allows a user to re-launch the same kernel without updating internal params struct.
-    Status
-    operator()(cudaStream_t stream = nullptr, CudaHostAdapter *cuda_adapter = nullptr, bool launch_with_pdl = false) {
-    return run(params_, stream, cuda_adapter, launch_with_pdl);
-  }
 };
 
  
