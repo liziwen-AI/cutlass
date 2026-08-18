@@ -370,11 +370,11 @@ bool verify(const Options &options) {
   Tensor tensor_D = cute::make_tensor(make_iterator(block_reference_D.host_data()), layout_D);
 
   cutlass::reference::host::GettBlockScalingEpilogueParams<
-      ElementCompute,                       // ElementScalar
+      ElementAccumulator,                       // ElementScalar
       ElementAccumulator,                   // ElementAccumulator
-      ElementCompute,                       // ElementCompute
+      ElementAccumulator,                       // ElementCompute
       decltype(tensor_C),                   // TensorC
-      decltype(tensor_D),                   // TensorD
+      decltype(tensor_D)                   // TensorD
     > epilogue_params {options.alpha, options.beta, tensor_C, tensor_D};
 
   cutlass::reference::host::Gemm3x(mainloop_params, epilogue_params);
