@@ -318,9 +318,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       // Use extended launch API only for mainloops that use it
       
 
-      [[maybe_unused]] constexpr bool is_static_1x1x1 =
-        cute::is_static_v<typename GemmKernel::DispatchPolicy::ClusterShape> and
-        cute::size(typename GemmKernel::DispatchPolicy::ClusterShape{}) == 1;
         
       [[maybe_unused]] dim3 cluster(cute::size<0>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
         cute::size<1>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
@@ -347,21 +344,9 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       static constexpr bool kClusterLaunch = GemmKernel::ArchTag::kMinComputeCapability == 90;
       
     
-      if constexpr (is_static_1x1x1) {
-        launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);
-      }
-      else {
-        launch_result = ClusterLauncher::launch_with_fallback_cluster(
-          grid, 
-          cluster,
-          fallback_cluster,
-          block,
-          smem_size,
-          stream,
-          kernel,
-          kernel_params,
-          launch_with_pdl);
-      }
+      
+      launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);
+
     
          
 
