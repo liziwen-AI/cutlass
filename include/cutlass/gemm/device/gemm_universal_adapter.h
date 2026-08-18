@@ -330,6 +330,7 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
         [[maybe_unused]] constexpr bool is_static_1x1x1 =
           cute::is_static_v<typename GemmKernel::DispatchPolicy::ClusterShape> and
           cute::size(typename GemmKernel::DispatchPolicy::ClusterShape{}) == 1;
+
         [[maybe_unused]] dim3 cluster(cute::size<0>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
           cute::size<1>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
           cute::size<2>(typename GemmKernel::DispatchPolicy::ClusterShape{}));
@@ -346,55 +347,7 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
           }
         }
         
-        [[maybe_unused]] void* kernel_params[] = {&params};
-
-        if constexpr (kEnableCudaHostAdapter) {}
-        else {
-          CUTLASS_ASSERT(cuda_adapter == nullptr);
-          [[maybe_unused]] void const* kernel = (void const*) device_kernel<GemmKernel>;
-          static constexpr bool kClusterLaunch = GemmKernel::ArchTag::kMinComputeCapability == 90;
-          if constexpr (kClusterLaunch) {
-            if constexpr (is_static_1x1x1) {
-
-              launch_result = cutlass::kernel_launch<GemmKernel>(
-                grid, block, smem_size, stream, params, launch_with_pdl);
-              if (launch_result != Status::kSuccess) {
-                CUTLASS_TRACE_HOST("GemmUniversal::run: cutlass::kernel_launch reports failure");
-              }
- 
-            }
-            else {
-              launch_result = ClusterLauncher::launch(
-                grid, cluster, block, smem_size, stream, kernel, kernel_params, launch_with_pdl);
-            }
-          }
-          
-          else {
-            if constexpr (GemmKernel::ArchTag::kMinComputeCapability == 100
-                          || GemmKernel::ArchTag::kMinComputeCapability == 101
-                          || GemmKernel::ArchTag::kMinComputeCapability == 120
-                          || GemmKernel::ArchTag::kMinComputeCapability == 103
-                        ) {
-              if constexpr (is_static_1x1x1) {
-                launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);
-                if (launch_result != Status::kSuccess) {
-                  CUTLASS_TRACE_HOST("GemmUniversal::run: cutlass::kernel_launch reports failure");
-                }
-              }
-              else {
-                launch_result = ClusterLauncher::launch_with_fallback_cluster(
-                  grid, 
-                  cluster,
-                  fallback_cluster,
-                  block,
-                  smem_size,
-                  stream,
-                  kernel,
-                  kernel_params,
-                  launch_with_pdl);
-              }
-            }
-          }
+        launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);     
           
         }
       }
