@@ -66,7 +66,6 @@ using OperatorClass       = cutlass::arch::OpClassBlockScaledTensorOp;      // O
 using MmaTileShape        = Shape<_128,_128,_256>;                          // MMA's tile size
 using ClusterShape        = Shape<_1,_1,_1>;                                // Shape of the threadblocks in a cluster
 
-constexpr int InputSFVectorSize  = 16;
 
 // D = alpha * acc + beta * C
 using FusionOperation = cutlass::epilogue::fusion::LinearCombination<
@@ -405,9 +404,6 @@ int run(Options &options)
 
   // Allocate workspace memory
   cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-
-  // Check if the problem size is supported or not
-  CUTLASS_CHECK(gemm.can_implement(arguments));
 
   // Initialize CUTLASS kernel with arguments and workspace pointer
   CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
