@@ -461,6 +461,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
   }
 };
 
-
+ 
 
 } // namespace cutlass::gemm::device
