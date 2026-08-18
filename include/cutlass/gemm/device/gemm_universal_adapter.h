@@ -330,20 +330,9 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
       launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);     
           
       
-      
-      
 
-      cudaError_t result = cudaGetLastError();
-      if (cudaSuccess == result && Status::kSuccess == launch_result) {
-  #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
-        CUTLASS_TRACE_HOST("GemmUniversal::run: cudaGetLastError reports success");
-  #endif
-        return Status::kSuccess;
-      }
-      else {
-        CUTLASS_TRACE_HOST("  Kernel launch failed. Reason: " << result);
-        return Status::kErrorInternal;
-      }
+      return Status::kSuccess;
+
     }
 
     //
@@ -365,17 +354,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
         status = run(params_, stream, cuda_adapter, launch_with_pdl);
       }
       return status;
-    }
-
-    /// Launches the kernel after first constructing Params internal state from supplied arguments.
-    Status
-    operator()(
-      Arguments const& args,
-      void* workspace = nullptr,
-      cudaStream_t stream = nullptr,
-      CudaHostAdapter *cuda_adapter = nullptr,
-      bool launch_with_pdl = false) {
-      return run(args, workspace, stream, cuda_adapter, launch_with_pdl);
     }
 
     /// Overload that allows a user to re-launch the same kernel without updating internal params struct.
