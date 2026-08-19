@@ -411,7 +411,7 @@ int run(Options &options)
   using KernelSchedule = typename Gemm::GemmKernel::CollectiveMainloop::DispatchPolicy::Schedule;
   std::cout << ">>> Kernel Schedule: " << type_name_of<KernelSchedule>() << std::endl;
 
-
+//  Kernel Schedule: cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<2, 2>
 
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;
