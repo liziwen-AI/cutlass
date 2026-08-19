@@ -170,76 +170,84 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
     }
 
 
-    /// Gets the workspace size
-    static size_t
-    get_workspace_size(Arguments const& args) {
-      size_t workspace_bytes = 0;
-      if (args.mode == GemmUniversalMode::kGemmSplitKParallel) {
-        workspace_bytes += sizeof(int) * size_t(cute::size<0>(TileShape{})) * size_t(cute::size<1>(TileShape{}));
-      }
-
-      workspace_bytes += GemmKernel::get_workspace_size(args);
-
-      CUTLASS_TRACE_HOST("  workspace_bytes: " << workspace_bytes);
-
-      return workspace_bytes;
+  /// Gets the workspace size
+  static size_t
+  get_workspace_size(Arguments const& args) {
+    size_t workspace_bytes = 0;
+    if (args.mode == GemmUniversalMode::kGemmSplitKParallel) {
+      workspace_bytes += sizeof(int) * size_t(cute::size<0>(TileShape{})) * size_t(cute::size<1>(TileShape{}));
     }
 
+    workspace_bytes += GemmKernel::get_workspace_size(args);
 
+    CUTLASS_TRACE_HOST("  workspace_bytes: " << workspace_bytes);
 
+    return workspace_bytes;
+  }
 
+  /// Computes the grid shape
+  static dim3
+  get_grid_shape(Arguments const& args, void* workspace = nullptr) {
+    auto tmp_params = GemmKernel::to_underlying_arguments(args, workspace);
+    return GemmKernel::get_grid_shape(tmp_params);
+  }
 
-    /// Initializes GEMM state from arguments.
-    Status
-    initialize(
-      Arguments const& args,
-      void* workspace = nullptr,
-      cudaStream_t stream = nullptr,
-      CudaHostAdapter* cuda_adapter = nullptr) {
+  /// Computes the grid shape
+  static dim3
+  get_grid_shape(Params const& params) {
+    return GemmKernel::get_grid_shape(params);
+  }
 
-      CUTLASS_TRACE_HOST("GemmUniversal::initialize() - workspace "
-        << workspace << ", stream: " << (stream ? "non-null" : "null"));
+  /// Initializes GEMM state from arguments.
+  Status
+  initialize(
+    Arguments const& args,
+    void* workspace = nullptr,
+    cudaStream_t stream = nullptr,
+    CudaHostAdapter* cuda_adapter = nullptr) {
 
-      // Initialize the workspace
-      Status status = GemmKernel::initialize_workspace(args, workspace, stream, cuda_adapter);
-      if (status != Status::kSuccess) {
-        return status;
-      }
-      // Initialize the Params structure
-      params_ = GemmKernel::to_underlying_arguments(args, workspace);
-      // Don't set the function attributes - require the CudaHostAdapter to set it.
-      if constexpr (kEnableCudaHostAdapter) {
-        CUTLASS_ASSERT(cuda_adapter);
-        return Status::kSuccess;
-      }
-      else {
-        //
-        // Account for dynamic smem capacity if needed
-        //
-        int smem_size = GemmKernel::SharedStorageSize;
+    CUTLASS_TRACE_HOST("GemmUniversal::initialize() - workspace "
+      << workspace << ", stream: " << (stream ? "non-null" : "null"));
 
-        CUTLASS_ASSERT(cuda_adapter == nullptr);
-
-        if (smem_size >= (48 << 10)) {
-          CUTLASS_TRACE_HOST("  Setting smem size to " << smem_size);
-          cudaError_t result = cudaFuncSetAttribute(
-              device_kernel<GemmKernel>,
-              cudaFuncAttributeMaxDynamicSharedMemorySize,
-              smem_size);
-          if (cudaSuccess != result) {
-            result = cudaGetLastError(); // to clear the error bit
-            CUTLASS_TRACE_HOST("  cudaFuncSetAttribute() returned error: " << cudaGetErrorString(result));
-            return Status::kErrorInternal;
-          }
-        }
-      }
+    // Initialize the workspace
+    Status status = GemmKernel::initialize_workspace(args, workspace, stream, cuda_adapter);
+    if (status != Status::kSuccess) {
+      return status;
+    }
+    // Initialize the Params structure
+    params_ = GemmKernel::to_underlying_arguments(args, workspace);
+    // Don't set the function attributes - require the CudaHostAdapter to set it.
+    if constexpr (kEnableCudaHostAdapter) {
+      CUTLASS_ASSERT(cuda_adapter);
       return Status::kSuccess;
     }
+    else {
+      //
+      // Account for dynamic smem capacity if needed
+      //
+      int smem_size = GemmKernel::SharedStorageSize;
+
+      CUTLASS_ASSERT(cuda_adapter == nullptr);
+
+      if (smem_size >= (48 << 10)) {
+        CUTLASS_TRACE_HOST("  Setting smem size to " << smem_size);
+        cudaError_t result = cudaFuncSetAttribute(
+            device_kernel<GemmKernel>,
+            cudaFuncAttributeMaxDynamicSharedMemorySize,
+            smem_size);
+        if (cudaSuccess != result) {
+          result = cudaGetLastError(); // to clear the error bit
+          CUTLASS_TRACE_HOST("  cudaFuncSetAttribute() returned error: " << cudaGetErrorString(result));
+          return Status::kErrorInternal;
+        }
+      }
+    }
+    return Status::kSuccess;
+  }
 
 
 
-
-
+    
     static Status
     run(Params& params,
         cudaStream_t stream = nullptr,
@@ -250,16 +258,10 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
 
       // configure smem size and carveout
       int smem_size = GemmKernel::SharedStorageSize;
-
       Status launch_result{ Status::kSuccess };
-
-        
       launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);     
           
-      
-
       return Status::kSuccess;
-
     }
 
     Status
