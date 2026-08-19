@@ -23,28 +23,14 @@
 // 3.x
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
 
-////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::device {
-
-////////////////////////////////////////////////////////////////////////////////
 
 template <class GemmKernel_, class Enable = void>
 class GemmUniversalAdapter;
 
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////// CUTLASS 3.x API /////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-
 namespace detail {
 
-// Work-around for some DispatchPolicy types not having a Stages member.
-// In that case, the Stages value is 0.  Most code should static_assert
-// that the number of stages is valid.
-
-// Whether DispatchPolicy::Stages is valid.
-// It should also be convertible to int, but if not, that will show up
-// as a build error when GemmUniversalAdapter attempts to assign it to kStages.
 template <class DispatchPolicy, class Enable = void>
 struct has_Stages : cute::false_type {};
 
@@ -84,47 +70,12 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
     using LayoutC = gemm::detail::StrideToLayoutTagC_t<typename GemmKernel::StrideC>;
     using LayoutD = gemm::detail::StrideToLayoutTagC_t<typename GemmKernel::StrideD>;
 
-    static bool const kEnableCudaHostAdapter = CUTLASS_ENABLE_CUDA_HOST_ADAPTER;
-
-    static ComplexTransform const kTransformA = cute::is_same_v<typename GemmKernel::CollectiveMainloop::TransformA, cute::conjugate> ?
-                                                ComplexTransform::kConjugate : ComplexTransform::kNone;
-    static ComplexTransform const kTransformB = cute::is_same_v<typename GemmKernel::CollectiveMainloop::TransformB, cute::conjugate> ?
-                                                ComplexTransform::kConjugate : ComplexTransform::kNone;
-
-    // Legacy: Assume MultiplyAdd only since we do not use this tag type in 3.0
-    using MathOperator = cutlass::arch::OpMultiplyAdd;
-
     using OperatorClass = cutlass::detail::get_operator_class_t<typename CollectiveMainloop::TiledMma>;
 
-    using ArchTag = typename GemmKernel::ArchTag;
-
-    // NOTE: Assume identity swizzle for now
-    using ThreadblockSwizzle = cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>;
-
-    // Assume TiledMma's ShapeMNK is the same as 2.x's ThreadblockShape
-    using ThreadblockShape = cutlass::gemm::GemmShape<
-        cute::size<0>(TileShape{}),
-        cute::size<1>(TileShape{}),
-        cute::size<2>(TileShape{})>;
-
-    using ClusterShape = cutlass::gemm::GemmShape<
-        cute::size<0>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
-        cute::size<1>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
-        cute::size<2>(typename GemmKernel::DispatchPolicy::ClusterShape{})>;
-
-    // Instruction shape is easy too, since we get that directly from our TiledMma's atom shape
-    using InstructionShape = cutlass::gemm::GemmShape<
-        cute::size<0>(typename CollectiveMainloop::TiledMma::AtomShape_MNK{}),
-        cute::size<1>(typename CollectiveMainloop::TiledMma::AtomShape_MNK{}),
-        cute::size<2>(typename CollectiveMainloop::TiledMma::AtomShape_MNK{})>;
 
     // Legacy: provide a correct warp count, but no reliable warp shape
     static int const kThreadCount = GemmKernel::MaxThreadsPerBlock;
 
-    // Warp shape is not a primary API type in 3.x
-    // But we can best approximate it by inspecting the TiledMma
-    // For this, we make the assumption that we always have 4 warps along M, and rest along N, none along K
-    // We also always round up the warp count to 4 if the tiled mma is smaller than 128 threads
     static constexpr int WarpsInMma = cute::max(4, CUTE_STATIC_V(cute::size(typename GemmKernel::TiledMma{})) / 32);
     static constexpr int WarpsInMmaM = 4;
     static constexpr int WarpsInMmaN = cute::ceil_div(WarpsInMma, WarpsInMmaM);
@@ -134,17 +85,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
         CUTE_STATIC_V(cute::tile_size<1>(typename CollectiveMainloop::TiledMma{})) / WarpsInMmaN,
         CUTE_STATIC_V(cute::tile_size<2>(typename CollectiveMainloop::TiledMma{}))>;
 
-    static int constexpr kStages = detail::stages_member(typename CollectiveMainloop::DispatchPolicy{});
-
-    // Inspect TiledCopy for A and B to compute the alignment size
-    static int constexpr kAlignmentA = cutlass::detail::get_alignment_count_from_gmem_tiled_copy<
-        typename CollectiveMainloop::GmemTiledCopyA, ElementA, typename CollectiveMainloop::TiledMma::ValTypeA>();
-    static int constexpr kAlignmentB = cutlass::detail::get_alignment_count_from_gmem_tiled_copy<
-        typename CollectiveMainloop::GmemTiledCopyB, ElementB, typename CollectiveMainloop::TiledMma::ValTypeB>();
-    static int constexpr kAlignmentC = cutlass::detail::get_alignment_count_from_gmem_tiled_copy<
-        typename CollectiveEpilogue::GmemTiledCopyC, ElementC>();
-    static int constexpr kAlignmentD = cutlass::detail::get_alignment_count_from_gmem_tiled_copy<
-        typename CollectiveEpilogue::GmemTiledCopyD, ElementD>();
 
     using EpilogueOutputOp = typename CollectiveEpilogue::ThreadEpilogueOp;
 
@@ -158,8 +98,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
     using Params = typename GemmKernel::Params;
 
   private:
-
-    /// Kernel API parameters object
     Params params_;
 
   public:
@@ -170,82 +108,50 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
     }
 
 
-  /// Gets the workspace size
-  static size_t
-  get_workspace_size(Arguments const& args) {
-    size_t workspace_bytes = 0;
-    if (args.mode == GemmUniversalMode::kGemmSplitKParallel) {
-      workspace_bytes += sizeof(int) * size_t(cute::size<0>(TileShape{})) * size_t(cute::size<1>(TileShape{}));
+    /// Gets the workspace size
+    static size_t
+    get_workspace_size(Arguments const& args) {
+      size_t workspace_bytes = 0;
+      if (args.mode == GemmUniversalMode::kGemmSplitKParallel) {
+        workspace_bytes += sizeof(int) * size_t(cute::size<0>(TileShape{})) * size_t(cute::size<1>(TileShape{}));
+      }
+      workspace_bytes += GemmKernel::get_workspace_size(args);
+      return workspace_bytes;
     }
 
-    workspace_bytes += GemmKernel::get_workspace_size(args);
-
-
-    return workspace_bytes;
-  }
-
-  /// Computes the grid shape
-  static dim3
-  get_grid_shape(Arguments const& args, void* workspace = nullptr) {
-    auto tmp_params = GemmKernel::to_underlying_arguments(args, workspace);
-    return GemmKernel::get_grid_shape(tmp_params);
-  }
-
-  /// Computes the grid shape
-  static dim3
-  get_grid_shape(Params const& params) {
-    return GemmKernel::get_grid_shape(params);
-  }
-
-  /// Initializes GEMM state from arguments.
-  Status
-  initialize(
-    Arguments const& args,
-    void* workspace = nullptr,
-    cudaStream_t stream = nullptr,
-    CudaHostAdapter* cuda_adapter = nullptr) {
-
-    CUTLASS_TRACE_HOST("GemmUniversal::initialize() - workspace "
-      << workspace << ", stream: " << (stream ? "non-null" : "null"));
-
-    // Initialize the workspace
-    Status status = GemmKernel::initialize_workspace(args, workspace, stream, cuda_adapter);
-    if (status != Status::kSuccess) {
-      return status;
+    /// Computes the grid shape
+    static dim3
+    get_grid_shape(Arguments const& args, void* workspace = nullptr) {
+      auto tmp_params = GemmKernel::to_underlying_arguments(args, workspace);
+      return GemmKernel::get_grid_shape(tmp_params);
     }
-    // Initialize the Params structure
-    params_ = GemmKernel::to_underlying_arguments(args, workspace);
-    // Don't set the function attributes - require the CudaHostAdapter to set it.
-    if constexpr (kEnableCudaHostAdapter) {
-      CUTLASS_ASSERT(cuda_adapter);
-      return Status::kSuccess;
+
+    /// Computes the grid shape
+    static dim3
+    get_grid_shape(Params const& params) {
+      return GemmKernel::get_grid_shape(params);
     }
-    else {
-      //
-      // Account for dynamic smem capacity if needed
-      //
+
+    /// Initializes GEMM state from arguments.
+    Status
+    initialize(
+      Arguments const& args,
+      void* workspace = nullptr,
+      cudaStream_t stream = nullptr,
+      CudaHostAdapter* cuda_adapter = nullptr) {
+
+      Status status = GemmKernel::initialize_workspace(args, workspace, stream, cuda_adapter);
+      params_ = GemmKernel::to_underlying_arguments(args, workspace);
       int smem_size = GemmKernel::SharedStorageSize;
 
-      CUTLASS_ASSERT(cuda_adapter == nullptr);
-
       if (smem_size >= (48 << 10)) {
-        CUTLASS_TRACE_HOST("  Setting smem size to " << smem_size);
         cudaError_t result = cudaFuncSetAttribute(
             device_kernel<GemmKernel>,
             cudaFuncAttributeMaxDynamicSharedMemorySize,
             smem_size);
-        if (cudaSuccess != result) {
-          result = cudaGetLastError(); // to clear the error bit
-          CUTLASS_TRACE_HOST("  cudaFuncSetAttribute() returned error: " << cudaGetErrorString(result));
-          return Status::kErrorInternal;
-        }
       }
+      return Status::kSuccess;
     }
-    return Status::kSuccess;
-  }
-
-
-
     
     static Status
     run(Params& params,
@@ -257,6 +163,7 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
 
       // configure smem size and carveout
       int smem_size = GemmKernel::SharedStorageSize;
+
       Status launch_result{ Status::kSuccess };
       launch_result = cutlass::kernel_launch<GemmKernel>(grid, block, smem_size, stream, params, launch_with_pdl);     
           
@@ -272,7 +179,5 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
     }
 
 };
-
- 
 
 } // namespace cutlass::gemm::device
