@@ -180,7 +180,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
 
     workspace_bytes += GemmKernel::get_workspace_size(args);
 
-    CUTLASS_TRACE_HOST("  workspace_bytes: " << workspace_bytes);
 
     return workspace_bytes;
   }
