@@ -35,6 +35,8 @@ class GemmUniversalAdapter<GemmKernel_, void>
 {
   public:
     using GemmKernel = GetUnderlyingKernel_t<GemmKernel_>;
+    using TileShape = typename GemmKernel::TileShape;
+
     using Arguments = typename GemmKernel::Arguments;
     /// Argument structure: Kernel API
     using Params = typename GemmKernel::Params;
