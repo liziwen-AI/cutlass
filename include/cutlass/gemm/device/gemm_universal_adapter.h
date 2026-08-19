@@ -29,69 +29,11 @@ namespace cutlass::gemm::device {
 template <class GemmKernel_, class Enable = void>
 class GemmUniversalAdapter;
 
-namespace detail {
-
-template <class DispatchPolicy, class Enable = void>
-struct has_Stages : cute::false_type {};
-
-template <class DispatchPolicy>
-struct has_Stages<DispatchPolicy, cute::void_t<decltype(DispatchPolicy::Stages)>> : cute::true_type {};
-
-template<class DispatchPolicy>
-constexpr int stages_member(DispatchPolicy) {
-  if constexpr (has_Stages<DispatchPolicy>::value) {
-    return DispatchPolicy::Stages;
-  }
-  else {
-    return 0;
-  }
-}
-
-} // namespace detail
 
 template <class GemmKernel_>
-class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass3GemmKernel<GetUnderlyingKernel_t<GemmKernel_>>::value>>
+class GemmUniversalAdapter<GemmKernel_, void>
 {
   public:
-    using GemmKernel = GetUnderlyingKernel_t<GemmKernel_>;
-    using TileShape = typename GemmKernel::TileShape;
-    using ElementA = typename GemmKernel::ElementA;
-    using ElementB = typename GemmKernel::ElementB;
-    using ElementC = typename GemmKernel::ElementC;
-    using ElementD = typename GemmKernel::ElementD;
-    using ElementAccumulator = typename GemmKernel::ElementAccumulator;
-    using DispatchPolicy = typename GemmKernel::DispatchPolicy;
-    using CollectiveMainloop = typename GemmKernel::CollectiveMainloop;
-    using CollectiveEpilogue = typename GemmKernel::CollectiveEpilogue;
-
-    // Map back to 2.x type as best as possible
-    using LayoutA = gemm::detail::StrideToLayoutTagA_t<typename GemmKernel::StrideA>;
-    using LayoutB = gemm::detail::StrideToLayoutTagB_t<typename GemmKernel::StrideB>;
-    using LayoutC = gemm::detail::StrideToLayoutTagC_t<typename GemmKernel::StrideC>;
-    using LayoutD = gemm::detail::StrideToLayoutTagC_t<typename GemmKernel::StrideD>;
-
-
-
-    // Legacy: provide a correct warp count, but no reliable warp shape
-    static int const kThreadCount = GemmKernel::MaxThreadsPerBlock;
-
-    static constexpr int WarpsInMma = cute::max(4, CUTE_STATIC_V(cute::size(typename GemmKernel::TiledMma{})) / 32);
-    static constexpr int WarpsInMmaM = 4;
-    static constexpr int WarpsInMmaN = cute::ceil_div(WarpsInMma, WarpsInMmaM);
-    using WarpCount = cutlass::gemm::GemmShape<WarpsInMmaM, WarpsInMmaN, 1>;
-    using WarpShape = cutlass::gemm::GemmShape<
-        CUTE_STATIC_V(cute::tile_size<0>(typename CollectiveMainloop::TiledMma{})) / WarpsInMmaM,
-        CUTE_STATIC_V(cute::tile_size<1>(typename CollectiveMainloop::TiledMma{})) / WarpsInMmaN,
-        CUTE_STATIC_V(cute::tile_size<2>(typename CollectiveMainloop::TiledMma{}))>;
-
-
-    using EpilogueOutputOp = typename CollectiveEpilogue::ThreadEpilogueOp;
-
-    // Split-K preserves splits that are 128b aligned
-    static int constexpr kSplitKAlignment = cute::max(
-        128 / sizeof_bits<ElementA>::value, 128 / sizeof_bits<ElementB>::value);
-
-    /// Argument structure: User API
     using Arguments = typename GemmKernel::Arguments;
     /// Argument structure: Kernel API
     using Params = typename GemmKernel::Params;
@@ -100,12 +42,10 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
     Params params_;
 
   public:
-
     /// Access the Params structure
     Params const& params() const {
       return params_;
     }
-
 
     /// Gets the workspace size
     static size_t

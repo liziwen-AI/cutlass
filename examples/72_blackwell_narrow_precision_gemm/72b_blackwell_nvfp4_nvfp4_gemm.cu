@@ -1,4 +1,20 @@
 #include <iostream>
+#include <cxxabi.h>   
+#include <typeinfo>
+
+// 类型名解码工具（对 abi::__cxa_demangle 的包装）
+inline std::string demangle_type(const char* mangled_name) {
+    int status = 0;
+    char* demangled = abi::__cxa_demangle(mangled_name, nullptr, nullptr, &status);
+    std::string result = (status == 0 && demangled) ? demangled : mangled_name;
+    free(demangled);
+    return result;
+}
+
+template <typename T>
+inline std::string type_name_of() {
+    return demangle_type(typeid(T).name());
+}
 
 #include "cutlass/cutlass.h"
 
@@ -58,7 +74,6 @@ constexpr int AlignmentC  = 128 / cutlass::sizeof_bits<ElementC>::value;    // M
 
 // Kernel functional config
 using ElementAccumulator  = float;                                          // Element type for internal accumulation
-using ElementCompute      = float;                                          // Element type for internal accumulation
 using ArchTag             = cutlass::arch::Sm100;                           // Tag indicating the minimum SM that supports the intended feature
 using OperatorClass       = cutlass::arch::OpClassBlockScaledTensorOp;      // Operator class tag
 
@@ -70,7 +85,7 @@ using ClusterShape        = Shape<_1,_1,_1>;                                // S
 // D = alpha * acc + beta * C
 using FusionOperation = cutlass::epilogue::fusion::LinearCombination<
     ElementD,      // FP16
-    ElementCompute, // float
+    ElementAccumulator, // float
     ElementC        // float
 >;
 
@@ -96,7 +111,7 @@ using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder
   >::CollectiveOp;
 
 using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-    Shape<int,int,int, int>, // Indicates ProblemShape
+    Shape<int,int,int, int>, 
     CollectiveMainloop,
     CollectiveEpilogue,
     void>;
@@ -371,7 +386,7 @@ bool verify(const Options &options) {
   cutlass::reference::host::GettBlockScalingEpilogueParams<
       ElementAccumulator,                       // ElementScalar
       ElementAccumulator,                   // ElementAccumulator
-      ElementAccumulator,                       // ElementCompute
+      ElementAccumulator,                       // ElementAccumulator
       decltype(tensor_C),                   // TensorC
       decltype(tensor_D)                   // TensorD
     > epilogue_params {options.alpha, options.beta, tensor_C, tensor_D};
@@ -392,6 +407,11 @@ template <typename Gemm>
 int run(Options &options)
 {
   initialize(options);
+
+  using KernelSchedule = typename Gemm::GemmKernel::CollectiveMainloop::DispatchPolicy::Schedule;
+  std::cout << ">>> Kernel Schedule: " << type_name_of<KernelSchedule>() << std::endl;
+
+
 
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;
