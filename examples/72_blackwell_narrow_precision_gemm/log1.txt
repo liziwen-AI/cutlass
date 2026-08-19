@@ -29,3 +29,9 @@ Cuda compilation tools, release 12.6, V12.6.85
 Build cuda_12.6.r12.6/compiler.35059454_0
 
 
+Built target 72b_blackwell_nvfp4_nvfp4_gemm
+>>> Kernel Schedule: cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<2, 2>
+  Disposition: Passed
+  Problem Size: 128x7168x16384
+  Avg runtime: 0.0231584 ms
+  GFLOPS: 1.29822e+06
