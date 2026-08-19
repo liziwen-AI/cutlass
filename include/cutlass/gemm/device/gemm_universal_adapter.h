@@ -70,7 +70,6 @@ class GemmUniversalAdapter<GemmKernel_,cute::enable_if_t<gemm::detail::IsCutlass
     using LayoutC = gemm::detail::StrideToLayoutTagC_t<typename GemmKernel::StrideC>;
     using LayoutD = gemm::detail::StrideToLayoutTagC_t<typename GemmKernel::StrideD>;
 
-    using OperatorClass = cutlass::detail::get_operator_class_t<typename CollectiveMainloop::TiledMma>;
 
 
     // Legacy: provide a correct warp count, but no reliable warp shape
