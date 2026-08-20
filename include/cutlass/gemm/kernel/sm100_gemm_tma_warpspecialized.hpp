@@ -1,34 +1,3 @@
-/***************************************************************************************************
- * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- **************************************************************************************************/
-
 #pragma once
 
 #include "cutlass/cutlass.h"
@@ -52,11 +21,9 @@
 #include "cute/arch/tmem_allocator_sm100.hpp"
 #include "cute/atom/mma_atom.hpp"
 
-///////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::kernel {
 
-///////////////////////////////////////////////////////////////////////////////
 
 template <
   class ProblemShape_,
@@ -76,12 +43,7 @@ class GemmUniversal<
                                 KernelTmaWarpSpecializedBlockScaledSm100>>>>
 {
 public:
-  //
-  // Type Aliases
-  //
   using ProblemShape = ProblemShape_;
-  static_assert(rank(ProblemShape{}) == 3 or rank(ProblemShape{}) == 4,
-    "ProblemShape{} should be <M,N,K> or <M,N,K,L>");
 
   // Mainloop derived types
   using CollectiveMainloop = CollectiveMainloop_;
@@ -100,7 +62,6 @@ public:
   using ClusterShape = typename DispatchPolicy::ClusterShape;
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
-  static_assert(ArchTag::kMinComputeCapability >= 100);
 
   // Epilogue derived types
   using CollectiveEpilogue = CollectiveEpilogue_;
@@ -296,44 +257,6 @@ public:
       )
       ,args.hw_info
     };
-  }
-
-  static bool
-  can_implement(Arguments const& args) {
-    bool implementable = (args.mode == GemmUniversalMode::kGemm) or
-        (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
-    if (!implementable) {
-      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Arguments or Problem Shape don't meet the requirements.\n");
-      return implementable;
-    }
-    implementable &= CollectiveMainloop::can_implement(args.problem_shape, args.mainloop);
-    implementable &= CollectiveEpilogue::can_implement(args.problem_shape, args.epilogue);
-    implementable &= TileScheduler::can_implement(args.scheduler);
-
-    if constexpr (IsDynamicCluster) {
-      static constexpr int MaxClusterSize = 16;
-      implementable &= size(args.hw_info.cluster_shape) <= MaxClusterSize;
-      implementable &= size(args.hw_info.cluster_shape_fallback) <= MaxClusterSize;
-      implementable &= cutlass::detail::preferred_cluster_can_implement<AtomThrShapeMNK>(args.hw_info.cluster_shape, args.hw_info.cluster_shape_fallback);
-    }
-    
-    constexpr bool IsBlockscaled = !cute::is_void_v<ElementSF>;
-    if constexpr (IsBlockscaled) {
-      if constexpr (IsDynamicCluster) {
-        implementable &= cutlass::detail::preferred_cluster_can_implement<AtomThrShapeMNK>(args.hw_info.cluster_shape, args.hw_info.cluster_shape_fallback);
-        // Special cluster shape check for scale factor multicasts. Due to limited size of scale factors, we can't multicast among
-        // more than 4 CTAs
-        implementable &= (args.hw_info.cluster_shape.x <= 4 && args.hw_info.cluster_shape.y <= 4 &&
-                          args.hw_info.cluster_shape_fallback.x <= 4 && args.hw_info.cluster_shape_fallback.y <= 4);
-      }
-      else {
-        // Special cluster shape check for scale factor multicasts. Due to limited size of scale factors, we can't multicast among
-        // more than 4 CTAs
-        implementable &= ((size<0>(ClusterShape{}) <= 4) && (size<1>(ClusterShape{}) <= 4));
-      }
-    }
-
-    return implementable;
   }
 
   static size_t
