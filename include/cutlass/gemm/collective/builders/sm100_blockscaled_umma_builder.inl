@@ -219,23 +219,23 @@ struct CollectiveBuilder<
       >
     >;
 
-  // using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
-  //     DispatchPolicy,
-  //     TileShape_MNK,
-  //     cute::tuple<ElementA, ElementSF>,
-  //     StridePairA,
-  //     cute::tuple<ElementB, ElementSF>,
-  //     StridePairB,
-  //     TiledMma,
-  //     GmemTiledCopyPairA,
-  //     SmemLayoutAtomsA,
-  //     void,
-  //     cute::identity,
-  //     GmemTiledCopyPairB,
-  //     SmemLayoutAtomsB,
-  //     void,
-  //     cute::identity
-  //   >;
+  using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
+      DispatchPolicy,
+      TileShape_MNK,
+      cute::tuple<ElementA, ElementSF>,
+      StridePairA,
+      cute::tuple<ElementB, ElementSF>,
+      StridePairB,
+      TiledMma,
+      GmemTiledCopyPairA,
+      SmemLayoutAtomsA,
+      void,
+      cute::identity,
+      GmemTiledCopyPairB,
+      SmemLayoutAtomsB,
+      void,
+      cute::identity
+    >;
 };
 
 } 
