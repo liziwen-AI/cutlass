@@ -48,7 +48,8 @@ void Kernel(typename Operator::Params params) {
   Operator op;
 
   op(params, *shared_storage);
-  cutlass::arch::synclog_print();   // ???debug????????}
+  cutlass::arch::synclog_print();   // 只在debug的时候生效
+}
 
 
 /// Generic CUTLASS kernel template.
