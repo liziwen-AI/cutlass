@@ -3,15 +3,14 @@
 #include "cutlass/gemm/collective/builders/sm100_common.inl"
 #include "cutlass/gemm/collective/builders/sm100_pipeline_carveout.inl"
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 namespace cutlass::gemm::collective {
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 namespace detail {
 
-// Returns the maximum number of smem tiles that can be used with a given smem capacity, or overrides with manual count. 
 template <
   int CapacityBytes,
   class ElementA,
@@ -59,7 +58,6 @@ sm100_compute_stage_count_or_override_blockscaled(StageCountAutoCarveout<carveou
 
 } // namespace detail
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <
   class ElementPairA,
@@ -69,8 +67,8 @@ template <
   class GmemLayoutBTag,
   int AlignmentB,
   class ElementAccumulator,
-  class TileShape_MNK,        // (MmaAtomShapeM, MmaAtomShapeN, TileK)
-  class ClusterShape_MNK,     // Static cluster shape or dynamic (int, int, _1)
+  class TileShape_MNK,        
+  class ClusterShape_MNK,     
   class StageCountType,
   class BuilderScheduleTag
 >
@@ -221,23 +219,23 @@ struct CollectiveBuilder<
       >
     >;
 
-  using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
-      DispatchPolicy,
-      TileShape_MNK,
-      cute::tuple<ElementA, ElementSF>,
-      StridePairA,
-      cute::tuple<ElementB, ElementSF>,
-      StridePairB,
-      TiledMma,
-      GmemTiledCopyPairA,
-      SmemLayoutAtomsA,
-      void,
-      cute::identity,
-      GmemTiledCopyPairB,
-      SmemLayoutAtomsB,
-      void,
-      cute::identity
-    >;
+  // using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
+  //     DispatchPolicy,
+  //     TileShape_MNK,
+  //     cute::tuple<ElementA, ElementSF>,
+  //     StridePairA,
+  //     cute::tuple<ElementB, ElementSF>,
+  //     StridePairB,
+  //     TiledMma,
+  //     GmemTiledCopyPairA,
+  //     SmemLayoutAtomsA,
+  //     void,
+  //     cute::identity,
+  //     GmemTiledCopyPairB,
+  //     SmemLayoutAtomsB,
+  //     void,
+  //     cute::identity
+  //   >;
 };
 
 } 
