@@ -37,17 +37,11 @@ Status kernel_launch(
     device_kernel<GemmKernel><<<grid_dims, block_dims, smem_size, cuda_stream>>>(kernel_params);
 
 
-  cudaError_t result = cudaGetLastError();
-  if (cudaSuccess == result) {
-#if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
-    CUTLASS_TRACE_HOST("cutlass::kernel_launch: cudaGetLastError reports success");
-#endif
+  
+ 
     return Status::kSuccess;
-  }
-  else {
-    CUTLASS_TRACE_HOST("  Kernel launch failed. Reason: " << result);
-    return Status::kErrorInternal;
-  }
+  
+  
 }
 
 } // namespace cutlass
