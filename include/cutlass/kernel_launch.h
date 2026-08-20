@@ -34,10 +34,8 @@ Status kernel_launch(
     const Params &kernel_params,
     bool launch_with_pdl) {
 
-  if (not launch_with_pdl) {
     device_kernel<GemmKernel><<<grid_dims, block_dims, smem_size, cuda_stream>>>(kernel_params);
-  }
-  else {}
+
 
   cudaError_t result = cudaGetLastError();
   if (cudaSuccess == result) {
