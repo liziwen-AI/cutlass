@@ -45,7 +45,6 @@ class GemmUniversal<
 public:
   using ProblemShape = ProblemShape_;
 
-  // Mainloop derived types
   using CollectiveMainloop = CollectiveMainloop_;
   using TileShape = typename CollectiveMainloop::TileShape;
   using TiledMma  = typename CollectiveMainloop::TiledMma;
@@ -63,7 +62,6 @@ public:
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
 
-  // Epilogue derived types
   using CollectiveEpilogue = CollectiveEpilogue_;
   using EpilogueTile = typename CollectiveEpilogue::EpilogueTile;
   using ElementC = typename CollectiveEpilogue::ElementC;
@@ -74,14 +72,10 @@ public:
   using EpilogueParams = typename CollectiveEpilogue::Params;
   static constexpr bool IsComplex = CollectiveEpilogue::NumAccumulatorMtxs == 2;
 
-  // CLC pipeline depth
-  // determines how many waves (stages-1) a warp can race ahead
   static constexpr uint32_t SchedulerPipelineStageCount = DispatchPolicy::Schedule::SchedulerPipelineStageCount;
   static constexpr uint32_t AccumulatorPipelineStageCount = DispatchPolicy::Schedule::AccumulatorPipelineStageCount;
   static constexpr bool IsOverlappingAccum = DispatchPolicy::IsOverlappingAccum;
 
-  // TileID scheduler
-  // Get Blk and Scheduling tile shapes
   using AtomThrShapeMNK = typename CollectiveMainloop::AtomThrShapeMNK;
   using CtaShape_MNK = typename CollectiveMainloop::CtaShape_MNK;
   using TileSchedulerTag = TileSchedulerTag_;
@@ -109,9 +103,7 @@ public:
 
   static constexpr uint32_t NumEpilogueSubTiles = CollectiveEpilogue::get_load_pipe_increment(CtaShape_MNK{});
 
-  // Fixup performed for split-/stream-K is done across warps in different CTAs
-  // at epilogue subtile granularity. Thus, there must be one barrier per sub-tile per
-  // epilogue warp.
+
   static constexpr uint32_t NumFixupBarriers = 1;
   static constexpr uint32_t CLCResponseSize = sizeof(typename TileScheduler::CLCResponse);
 
@@ -209,11 +201,6 @@ public:
     uint32_t epilogue  = false;
   };
 
-  //
-  // Methods
-  //
-
-  // Convert to underlying arguments.
   static
   Params
   to_underlying_arguments(Arguments const& args, void* workspace) {
@@ -303,10 +290,8 @@ public:
     return status;
   }
 
-  // Computes the kernel launch grid shape based on runtime parameters
   static dim3
   get_grid_shape(Params const& params) {
-    // NOTE cluster_shape here is the major cluster shape, not fallback one
     auto cluster_shape = cutlass::detail::select_cluster_shape(ClusterShape{}, params.hw_info.cluster_shape);
 
     auto problem_shape_MNKL = append<4>(params.problem_shape, Int<1>{});
@@ -331,12 +316,9 @@ public:
     using namespace cute;
     using X = Underscore;
 
-    // Separate out problem shape for convenience
-    // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
     auto problem_shape_MNKL = append<4>(params.problem_shape, Int<1>{});
     auto [M,N,K,L] = problem_shape_MNKL;
 
-    // Account for more than one epilogue warp
     int warp_idx = canonical_warp_idx_sync();
     WarpCategory warp_category = warp_idx < static_cast<int>(WarpCategory::Epilogue) ? WarpCategory(warp_idx)
                                                                                      : WarpCategory::Epilogue;
@@ -351,14 +333,11 @@ public:
     constexpr bool has_mma_peer_cta = size(AtomThrShapeMNK{}) == 2;
     [[maybe_unused]] uint32_t mma_peer_cta_rank = has_mma_peer_cta ? cta_rank_in_cluster ^ 1 : cta_rank_in_cluster;
 
-    // Kernel level shared memory storage
     SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
 
-    // In a warp specialized kernel, collectives expose data movement and compute operations separately
     CollectiveMainloop collective_mainloop(params.mainloop, cluster_shape, cta_rank_in_cluster);
     CollectiveEpilogue collective_epilogue(params.epilogue, shared_storage.tensors.epilogue);
 
-    // Issue Tma Descriptor Prefetch from a single thread
     if ((warp_category == WarpCategory::Sched) && lane_predicate) {
       collective_mainloop.prefetch_tma_descriptors();
     }
@@ -366,7 +345,6 @@ public:
       collective_epilogue.prefetch_tma_descriptors(params.epilogue);
     }
 
-    // Do we load source tensor C or other aux inputs
     bool is_epi_load_needed = collective_epilogue.is_producer_load_needed();
     IsParticipant is_participant = {
       (warp_category == WarpCategory::MMA),                                 // mma
@@ -376,7 +354,6 @@ public:
       (warp_category == WarpCategory::Epilogue)                             // epilogue
     };
 
-    // Mainloop Load pipeline
     typename MainloopPipeline::Params mainloop_pipeline_params;
     if (WarpCategory::MainloopLoad == warp_category) {
       mainloop_pipeline_params.role = MainloopPipeline::ThreadCategory::Producer;
@@ -393,7 +370,6 @@ public:
                                        cute::true_type{},   // Perform barrier init
                                        cute::false_type{}); // Delay mask calculation
 
-    // Epilogue Load pipeline
     typename EpiLoadPipeline::Params epi_load_pipeline_params;
     if (WarpCategory::EpilogueLoad == warp_category) {
       epi_load_pipeline_params.role = EpiLoadPipeline::ThreadCategory::Producer;
@@ -529,23 +505,18 @@ public:
     TileScheduler scheduler(&shared_storage.clc_response[0], params.scheduler, block_id_in_cluster);
     typename TileScheduler::WorkTileInfo work_tile_info = scheduler.initial_work_tile_info(cluster_shape);
     auto cta_coord_mnkl = scheduler.work_tile_to_cta_coord(work_tile_info);
-    //
-    // TMEM "Allocation"
-    //
     auto tmem_storage = collective_mainloop.template init_tmem_tensors<EpilogueTile, IsOverlappingAccum>(EpilogueTile{});
 
     pipeline_init_wait(cluster_size);
 
     if (is_participant.main_load) {
-      // Ensure that the prefetched kernel does not touch
-      // unflushed global memory prior to this instruction
+
       cutlass::arch::wait_on_dependent_grids();
 
       bool do_load_order_arrive = is_epi_load_needed;
       bool requires_clc_query = true;
 
       do {
-        // Get the number of K tiles to compute for this work as well as the starting K tile offset of the work.
         auto k_tile_iter = scheduler.get_k_tile_iterator(work_tile_info, problem_shape_MNKL, CtaShape_MNK{}, load_inputs.k_tiles);
         auto k_tile_count = TileScheduler::get_work_k_tile_count(work_tile_info, problem_shape_MNKL, CtaShape_MNK{});
         auto k_tile_prologue = min(MainloopPipeline::Stages, k_tile_count);
@@ -558,7 +529,6 @@ public:
           }
         }
 
-        // Start mainloop prologue loads, arrive on the epilogue residual load barrier, resume mainloop loads
         auto [mainloop_producer_state_next, k_tile_iter_next] = collective_mainloop.load(
           mainloop_pipeline,
           mainloop_pipe_producer_state,
@@ -602,9 +572,7 @@ public:
 
     else if (is_participant.sched) {
       if constexpr (IsSchedDynamicPersistent) {
-        // Whether a new CLC query must be performed.
-        // See comment below where this variable is updated for a description of
-        // why this variable is needed.
+
         bool requires_clc_query = true;
 
         cutlass::arch::wait_on_dependent_grids();
@@ -620,20 +588,12 @@ public:
             clc_pipe_producer_state = scheduler.advance_to_next_work(clc_pipeline, clc_pipe_producer_state);
           }
 
-          // Fetch next work tile
           auto [next_work_tile_info, increment_pipe] = scheduler.fetch_next_work(
             work_tile_info,
             clc_pipeline,
             clc_pipe_consumer_state
           );
 
-          // Only perform a new CLC query if we consumed a new CLC query result in
-          // `fetch_next_work`. An example of a case in which CLC `fetch_next_work` does
-          // not consume a new CLC query response is when processing stream-K units.
-          // The current stream-K scheduler uses single WorkTileInfo to track multiple
-          // (potentially-partial) tiles to be computed via stream-K. In this case,
-          // `fetch_next_work` simply performs in-place updates on the existing WorkTileInfo,
-          // rather than consuming a CLC query response.
           requires_clc_query = increment_pipe;
           if (increment_pipe) {
             ++clc_pipe_consumer_state;
@@ -881,6 +841,5 @@ public:
   }
 };
 
-///////////////////////////////////////////////////////////////////////////////
 
 } // namespace cutlass::gemm::kernel

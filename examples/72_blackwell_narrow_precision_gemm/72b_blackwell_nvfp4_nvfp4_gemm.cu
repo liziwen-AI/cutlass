@@ -96,7 +96,7 @@ using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBui
     ElementAccumulator, ElementAccumulator,
     ElementC, LayoutCTag, AlignmentC,
     ElementD, LayoutDTag, AlignmentD,
-    cutlass::epilogue::collective::EpilogueScheduleAuto,                      // Epilogue schedule policy
+    cutlass::epilogue::collective::EpilogueScheduleAuto,                      
     FusionOperation
   >::CollectiveOp;
 
@@ -107,7 +107,7 @@ using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder
     ElementAccumulator,
     MmaTileShape, ClusterShape,
     cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
-    cutlass::gemm::collective::KernelScheduleAuto                              // Kernel schedule policy. Auto or using targeted scheduling policy
+    cutlass::gemm::collective::KernelScheduleAuto                              
   >::CollectiveOp;
 
 using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
@@ -413,22 +413,12 @@ int run(Options &options)
 
 //  Kernel Schedule: cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<2, 2>
 
-  // Instantiate CUTLASS kernel depending on templates
+
   Gemm gemm;
-
-  // Create a structure of gemm kernel arguments suitable for invoking an instance of Gemm
   auto arguments = args_from_options(options);
-
-  // Using the arguments, query for extra workspace required for matrix multiplication computation
   size_t workspace_size = Gemm::get_workspace_size(arguments);
-
-  // Allocate workspace memory
   cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-
-  // Initialize CUTLASS kernel with arguments and workspace pointer
   CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
-
-  // Correctness / Warmup iteration
   CUTLASS_CHECK(gemm.run());
 
   cudaDeviceSynchronize();    //阻塞CPU线程，等待GPU把活干完了再继续下一步
