@@ -203,21 +203,21 @@ struct CollectiveBuilder<
   static constexpr int PipelineStages = cutlass::gemm::collective::detail::sm100_compute_stage_count_or_override_blockscaled<
       Sm100ReducedSmemCapacityBytes, ElementAMma_SmemAllocType, ElementBMma_SmemAllocType, SmemTileShape, SmemLayoutAtomSFA, SmemLayoutAtomSFB>(StageCountType{});
 
-  using DispatchPolicy = 
-    cute::conditional_t<IsArrayOfPointersGemm,
-      cutlass::gemm::MainloopSm100ArrayTmaUmmaWarpSpecializedBlockScaled<
-          PipelineStages,
-          SchedulerPipelineStageCount,
-          AccumulatorPipelineStageCount,
-          ClusterShape_MNK
-      >,
-      cutlass::gemm::MainloopSm100TmaUmmaWarpSpecializedBlockScaled<
-          PipelineStages,
-          SchedulerPipelineStageCount,
-          AccumulatorPipelineStageCount,
-          ClusterShape_MNK
-      >
-    >;
+  // using DispatchPolicy = 
+  //   cute::conditional_t<IsArrayOfPointersGemm,
+  //     cutlass::gemm::MainloopSm100ArrayTmaUmmaWarpSpecializedBlockScaled<
+  //         PipelineStages,
+  //         SchedulerPipelineStageCount,
+  //         AccumulatorPipelineStageCount,
+  //         ClusterShape_MNK
+  //     >,
+  //     cutlass::gemm::MainloopSm100TmaUmmaWarpSpecializedBlockScaled<
+  //         PipelineStages,
+  //         SchedulerPipelineStageCount,
+  //         AccumulatorPipelineStageCount,
+  //         ClusterShape_MNK
+  //     >
+  //   >;
 
   using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
       DispatchPolicy,
