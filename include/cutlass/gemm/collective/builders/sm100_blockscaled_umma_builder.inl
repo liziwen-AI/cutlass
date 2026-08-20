@@ -134,10 +134,9 @@ struct CollectiveBuilder<
   using ElementAMma_SmemAllocType = cute::conditional_t<UseMxf8f6f4, uint8_t, ElementAMma>;
   using ElementBMma_SmemAllocType = cute::conditional_t<UseMxf8f6f4, uint8_t, ElementBMma>;
 
-  // ((MMA_TILE_M,MMA_TILE_K), MMA_M, MMA_K)
   using MmaShapeA_MK = decltype(partition_shape_A(TiledMma{}, make_shape(cute::size<0>(TileShape_MNK{}),
                                                                          cute::size<2>(TileShape_MNK{}))));
-  // ((MMA_TILE_N,MMA_TILE_K), MMA_N, MMA_K)
+
   using MmaShapeB_NK = decltype(partition_shape_B(TiledMma{}, make_shape(cute::size<1>(TileShape_MNK{}),
                                                                          cute::size<2>(TileShape_MNK{}))));
 
