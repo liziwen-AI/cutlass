@@ -1417,83 +1417,83 @@ public:
     >::CollectiveOp;
 };
 
-// // Auto epilogue builder for TensorOp kernels
-// template <
-//   class OpClass,
-//   class MmaTileShape_MNK,
-//   class ClusterShape_MNK,
-//   class EpilogueTileType,
-//   class ElementAccumulator,
-//   class ElementCompute,
-//   class ElementC,
-//   class GmemLayoutTagC,
-//   int AlignmentC,
-//   class ElementD,
-//   class GmemLayoutTagD,
-//   int AlignmentD,
-//   class FusionOp
-// >
-// struct CollectiveBuilder<
-//     arch::Sm100,
-//     OpClass,
-//     MmaTileShape_MNK,
-//     ClusterShape_MNK,
-//     EpilogueTileType,
-//     ElementAccumulator,
-//     ElementCompute,
-//     ElementC,
-//     GmemLayoutTagC,
-//     AlignmentC,
-//     ElementD,
-//     GmemLayoutTagD,
-//     AlignmentD,
-//     EpilogueScheduleAuto,
-//     FusionOp,
-//     // only for TensorOp kernels
-//     cute::enable_if_t<not cute::is_same_v<OpClass, arch::OpClassSimt>>
-// >
-//  {
-// private:
-//   static constexpr bool
-//   is_2sm() {
-//     using namespace cute;
-//     constexpr int MmaTileM = size<0>(MmaTileShape_MNK{});
-//     constexpr int ClusterM = size<0>(ClusterShape_MNK{});
-//     constexpr bool StaticClusterM = is_static_v<decltype(get<0>(ClusterShape_MNK{}))>;
-//     constexpr bool EvenClusterM = StaticClusterM && ClusterM % 2 == 0;
-//     if constexpr (not EvenClusterM) {
-//       return false;
-//     }
-//     else if constexpr (is_same_v<OpClass,arch::OpClassBlockScaledTensorOp>) {
-//       return MmaTileM == 256;
-//     }
-//     else {
-//       return MmaTileM == 256 || MmaTileM == 128;
-//     }
-//   }
-//   using EpilogueSchedule = cute::conditional_t<is_2sm(), TmaWarpSpecialized2Sm, TmaWarpSpecialized1Sm>;
+// Auto epilogue builder for TensorOp kernels
+template <
+  class OpClass,
+  class MmaTileShape_MNK,
+  class ClusterShape_MNK,
+  class EpilogueTileType,
+  class ElementAccumulator,
+  class ElementCompute,
+  class ElementC,
+  class GmemLayoutTagC,
+  int AlignmentC,
+  class ElementD,
+  class GmemLayoutTagD,
+  int AlignmentD,
+  class FusionOp
+>
+struct CollectiveBuilder<
+    arch::Sm100,
+    OpClass,
+    MmaTileShape_MNK,
+    ClusterShape_MNK,
+    EpilogueTileType,
+    ElementAccumulator,
+    ElementCompute,
+    ElementC,
+    GmemLayoutTagC,
+    AlignmentC,
+    ElementD,
+    GmemLayoutTagD,
+    AlignmentD,
+    EpilogueScheduleAuto,
+    FusionOp,
+    // only for TensorOp kernels
+    cute::enable_if_t<not cute::is_same_v<OpClass, arch::OpClassSimt>>
+>
+ {
+private:
+  static constexpr bool
+  is_2sm() {
+    using namespace cute;
+    constexpr int MmaTileM = size<0>(MmaTileShape_MNK{});
+    constexpr int ClusterM = size<0>(ClusterShape_MNK{});
+    constexpr bool StaticClusterM = is_static_v<decltype(get<0>(ClusterShape_MNK{}))>;
+    constexpr bool EvenClusterM = StaticClusterM && ClusterM % 2 == 0;
+    if constexpr (not EvenClusterM) {
+      return false;
+    }
+    else if constexpr (is_same_v<OpClass,arch::OpClassBlockScaledTensorOp>) {
+      return MmaTileM == 256;
+    }
+    else {
+      return MmaTileM == 256 || MmaTileM == 128;
+    }
+  }
+  using EpilogueSchedule = cute::conditional_t<is_2sm(), TmaWarpSpecialized2Sm, TmaWarpSpecialized1Sm>;
 
-// public:
-//   static_assert(cute::is_same_v<EpilogueTileType, EpilogueTileAuto>, "Don't specify epilogue tile with auto schedule");
-//   using CollectiveOp =
-//     typename CollectiveBuilder<
-//       arch::Sm100,
-//       OpClass,
-//       MmaTileShape_MNK,
-//       ClusterShape_MNK,
-//       EpilogueTileType,
-//       ElementAccumulator,
-//       ElementCompute,
-//       ElementC,
-//       GmemLayoutTagC,
-//       AlignmentC,
-//       ElementD,
-//       GmemLayoutTagD,
-//       AlignmentD,
-//       EpilogueSchedule,
-//       FusionOp
-//     >::CollectiveOp;
-// };
+public:
+  static_assert(cute::is_same_v<EpilogueTileType, EpilogueTileAuto>, "Don't specify epilogue tile with auto schedule");
+  using CollectiveOp =
+    typename CollectiveBuilder<
+      arch::Sm100,
+      OpClass,
+      MmaTileShape_MNK,
+      ClusterShape_MNK,
+      EpilogueTileType,
+      ElementAccumulator,
+      ElementCompute,
+      ElementC,
+      GmemLayoutTagC,
+      AlignmentC,
+      ElementD,
+      GmemLayoutTagD,
+      AlignmentD,
+      EpilogueSchedule,
+      FusionOp
+    >::CollectiveOp;
+};
 
 // template <
 //   class MmaTileShape_MNK,
@@ -1528,7 +1528,9 @@ public:
 //     cute::enable_if_t<
 //       cute::is_same_v<EpilogueScheduleType, EpilogueSimtVectorized> ||
 //       cute::is_same_v<EpilogueScheduleType, EpiloguePtrArraySimtVectorized> ||
-//       cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto> >> {
+//       cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto> >
+//   > 
+//   {
 //   using CtaTileShape_MNK = MmaTileShape_MNK; // cluster MMA not supported
 
 //   // Passing void C disables source load
@@ -1594,6 +1596,6 @@ public:
 //       CopyAtomR2G,
 //       Schedule>;
 // };
-///////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////
 
 } // namespace cutlass::epilogue::collective
