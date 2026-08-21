@@ -3,12 +3,7 @@
 #include "cutlass/gemm/collective/builders/sm100_common.inl"
 #include "cutlass/gemm/collective/builders/sm100_pipeline_carveout.inl"
 
-
-
 namespace cutlass::gemm::collective {
-
-
-
 namespace detail {
 
 template <
