@@ -1354,6 +1354,69 @@ struct Sm100AuxStoreDescriptor {
 } // namespace detail
 
 
+
+
+// TMA epilogue builder
+template <
+  class OpClass,
+  class MmaTileShape_MNK,
+  class ClusterShape_MNK,
+  class EpilogueTileType,
+  class ElementAccumulator,
+  class ElementCompute,
+  class ElementC,
+  class GmemLayoutTagC,
+  int AlignmentC,
+  class ElementD,
+  class GmemLayoutTagD,
+  int AlignmentD,
+  class EpilogueScheduleType,
+  class FusionOp
+>
+struct CollectiveBuilder<
+    arch::Sm100,
+    OpClass,
+    MmaTileShape_MNK,
+    ClusterShape_MNK,
+    EpilogueTileType,
+    ElementAccumulator,
+    ElementCompute,
+    ElementC,
+    GmemLayoutTagC,
+    AlignmentC,
+    ElementD,
+    GmemLayoutTagD,
+    AlignmentD,
+    EpilogueScheduleType,
+    FusionOp,
+    cute::enable_if_t<
+      // Only support TensorOp kernels
+      not cute::is_same_v<OpClass, arch::OpClassSimt> &&
+      (cute::is_base_of_v<TmaWarpSpecialized1Sm, EpilogueScheduleType> ||
+       cute::is_base_of_v<TmaWarpSpecialized2Sm, EpilogueScheduleType>)
+    >
+>
+ {
+public:
+  using CollectiveOp =
+    typename detail::Sm100TmaBuilderImpl<
+      OpClass,
+      MmaTileShape_MNK,
+      ClusterShape_MNK,
+      EpilogueTileType,
+      ElementAccumulator,
+      ElementCompute,
+      ElementC,
+      GmemLayoutTagC,
+      AlignmentC,
+      ElementD,
+      GmemLayoutTagD,
+      AlignmentD,
+      EpilogueScheduleType,
+      FusionOp
+    >::CollectiveOp;
+};
+
 // Auto epilogue builder for TensorOp kernels
 template <
   class OpClass,
