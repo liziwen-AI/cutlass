@@ -411,16 +411,16 @@ int run(Options &options)
   // using KernelSchedule = typename Gemm::GemmKernel::CollectiveMainloop::DispatchPolicy::Schedule;
   // std::cout << ">>> Kernel Schedule: " << type_name_of<KernelSchedule>() << std::endl;
 
-  std::cout << ">>> CollectiveMainloop: " 
-          << type_name_of<typename Gemm::GemmKernel::CollectiveMainloop>() 
-          << std::endl;
+  // std::cout << ">>> CollectiveMainloop: " 
+  //         << type_name_of<typename Gemm::GemmKernel::CollectiveMainloop>() 
+  //         << std::endl;
 
-  std::cout << ">>> CollectiveEpilogue: " 
-            << type_name_of<typename Gemm::GemmKernel::CollectiveEpilogue>() 
-            << std::endl;
+  // std::cout << ">>> CollectiveEpilogue: " 
+  //           << type_name_of<typename Gemm::GemmKernel::CollectiveEpilogue>() 
+  //           << std::endl;
 
-  using EpilogueSchedule = typename Gemm::GemmKernel::CollectiveEpilogue::DispatchPolicy::Schedule;
-  std::cout << ">>> Epilogue Schedule: " << type_name_of<EpilogueSchedule>() << std::endl;
+  // using EpilogueSchedule = typename Gemm::GemmKernel::CollectiveEpilogue::DispatchPolicy::Schedule;
+  // std::cout << ">>> Epilogue Schedule: " << type_name_of<EpilogueSchedule>() << std::endl;
   
 
 //  Kernel Schedule: cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<2, 2>
